@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:tpflutter/contactForm.dart';
+import 'dart:io';
 
 import 'sql_helper.dart';
 
@@ -13,13 +16,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // Remove the debug banner
-        debugShowCheckedModeBanner: false,
-        title: 'Contacts',
-        theme: ThemeData(
-          primarySwatch: Colors.orange,
-        ),
-        home: const HomePage());
+      debugShowCheckedModeBanner: false,
+      title: 'Contacts',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: const HomePage(),
+    );
   }
 }
 
@@ -31,11 +34,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // All journals
   List<Map<String, dynamic>> _journals = [];
-
   bool _isLoading = true;
-  // This function is used to fetch all data from the database
+
   void _refreshJournals() async {
     final data = await SQLHelper.getItems();
     setState(() {
@@ -47,100 +48,28 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _refreshJournals(); // Loading the diary when the app starts
+    _refreshJournals();
   }
 
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _telController = TextEditingController();
-
-  // This function will be triggered when the floating button is pressed
-  // It will also be triggered when you want to update an item
-  void _showForm(int? id) async {
-    if (id != null) {
-      // id == null -> create new item
-      // id != null -> update an existing item
-      final existingJournal =
-      _journals.firstWhere((element) => element['id'] == id);
-      _nameController.text = existingJournal['name'];
-      _telController.text = existingJournal['tel'];
+  void _navigateToFormPage(int? id) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ContactFormPage(id: id),
+      ),
+    );
+    if (result != null && result) {
+      _refreshJournals();
     }
-
-    showModalBottomSheet(
-        context: context,
-        elevation: 5,
-        isScrollControlled: true,
-        builder: (_) => Container(
-          padding: EdgeInsets.only(
-            top: 15,
-            left: 15,
-            right: 15,
-            // this will prevent the soft keyboard from covering the text fields
-            bottom: MediaQuery.of(context).viewInsets.bottom + 120,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(hintText: 'Nom'),
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-              TextField(
-                controller: _telController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(hintText: 'Telephone', labelText: 'Number',),
-              ),
-              const SizedBox(
-                height: 20,
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  // Save new journal
-                  if (id == null) {
-                    await _addItem();
-                  }
-
-                  if (id != null) {
-                    await _updateItem(id);
-                  }
-
-                  // Clear the text fields
-                  _nameController.text = '';
-                  _telController.text = '';
-
-                  // Close the bottom sheet
-                  Navigator.of(context).pop();
-                },
-                child: Text(id == null ? 'Create New' : 'Update'),
-              )
-            ],
-          ),
-        ));
   }
 
-// Insert a new journal to the database
-  Future<void> _addItem() async {
-    await SQLHelper.createItem(
-        _nameController.text, _telController.text);
-    _refreshJournals();
-  }
-
-  // Update an existing journal
-  Future<void> _updateItem(int id) async {
-    await SQLHelper.updateItem(
-        id, _nameController.text, _telController.text);
-    _refreshJournals();
-  }
-
-  // Delete an item
   void _deleteItem(int id) async {
     await SQLHelper.deleteItem(id);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Successfully deleted a journal!'),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Successfully deleted a contact!'),
+      ),
+    );
     _refreshJournals();
   }
 
@@ -157,67 +86,59 @@ class _HomePageState extends State<HomePage> {
           : ListView.builder(
         itemCount: _journals.length,
         itemBuilder: (context, index) => Card(
-          color: Colors.orange[200],
-
-    child: Expanded(
-       child: Container(
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage('assets/images/person.png'),
-              alignment: Alignment.bottomLeft,
-              opacity: 0.5,
-              fit: BoxFit.fitHeight,
-
+          color: Colors.blueGrey[100],
+          child: ListTile(
+            title: Container(
+              margin: EdgeInsets.symmetric(horizontal: 10.0),
+              child: Text(_journals[index]['name']),
+            ),
+            subtitle: Container(
+              margin: EdgeInsets.symmetric(horizontal: 10.0),
+              child: Text(_journals[index]['tel']),
+            ),
+            leading: _journals[index]['image'] != null
+                ? Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                image: DecorationImage(
+                  image: FileImage(File(_journals[index]['image'])),
+                  fit: BoxFit.cover,
+                ),
+              ),
             )
-        ),
-
-    child:  ListTile(
-      title:Container(
-        margin: EdgeInsets.symmetric(horizontal: 50.0),
-        child: Text(_journals[index]['name']),
-      ),
-      subtitle:Container(
-        margin: EdgeInsets.symmetric(horizontal: 50.0), // Marge de 8 pixels verticalement
-        child: Text(_journals[index]['tel']),
-      ),
-
-      onTap: (){
-        FlutterPhoneDirectCaller.callNumber(_journals[index]['tel']);
-      },
-
-      trailing: SizedBox(
-        width: 100,
-
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => _showForm(_journals[index]['id']),
+                : null,
+            onTap: () {
+              FlutterPhoneDirectCaller.callNumber(
+                  _journals[index]['tel']);
+            },
+            trailing: SizedBox(
+              width: 100,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () =>
+                        _navigateToFormPage(_journals[index]['id']),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () =>
+                        _deleteItem(_journals[index]['id']),
+                  ),
+                ],
+              ),
             ),
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: () =>
-                  _deleteItem(_journals[index]['id']),
-            ),
-
-          ],
-        ),
-      ),
-    ),
-  ),
-
-
-),
-
-
-            ),
-
           ),
-
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
-        onPressed: () => _showForm(null),
+        onPressed: () => _navigateToFormPage(null),
       ),
     );
   }
 }
+
+
